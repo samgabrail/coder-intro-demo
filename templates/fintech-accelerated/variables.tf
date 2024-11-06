@@ -32,11 +32,11 @@ variable "max_memory" {
   type        = string
   description = "Maximum amount of memory to allocate the workspace (in GB)"
   sensitive   = true
-  default     = "8"
+  default     = "4"
 }
 variable "min_memory" {
   type        = string
   description = "Minimum amount of memory to allocate the workspace (in GB)"
   sensitive   = true
-  default     = "4"
+  default     = "2"
 }
