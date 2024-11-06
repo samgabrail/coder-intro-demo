@@ -19,24 +19,24 @@ variable "create_fuse" {
 variable "max_cpus" {
   type        = string
   sensitive   = true
-  description = "Max number of CPUs the workspace may use (e.g. 2)."
-  default     = "8"
+  description = "Max number of CPUs the workspace may use"
+  default     = "4"
 }
 variable "min_cpus" {
   type        = string
   sensitive   = true
-  description = "Minimum number of CPUs the workspace may use (e.g. .1)."
-  default     = "6"
+  description = "Minimum number of CPUs the workspace may use"
+  default     = "2"
 }
 variable "max_memory" {
   type        = string
-  description = "Maximum amount of memory to allocate the workspace (in GB)."
+  description = "Maximum amount of memory to allocate the workspace (in GB)"
   sensitive   = true
-  default     = "10"
+  default     = "8"
 }
 variable "min_memory" {
   type        = string
-  description = "Minimum amount of memory to allocate the workspace (in GB)."
+  description = "Minimum amount of memory to allocate the workspace (in GB)"
   sensitive   = true
-  default     = "8"
+  default     = "4"
 }
