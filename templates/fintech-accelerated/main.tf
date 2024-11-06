@@ -73,21 +73,6 @@ resource "coder_agent" "main" {
     GITHUB_TOKEN        = data.coder_external_auth.github.access_token
   }
 
-  metadata {
-    display_name = "CPU Usage"
-    key          = "cpu_usage"
-    script       = "coder stat cpu"
-    interval     = 10
-    timeout      = 1
-  }
-
-  metadata {
-    display_name = "RAM Usage"
-    key          = "ram_usage"
-    script       = "coder stat mem"
-    interval     = 10
-    timeout      = 1
-  }
 }
 
 resource "kubernetes_persistent_volume_claim" "workspace" {
