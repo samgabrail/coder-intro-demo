@@ -37,20 +37,13 @@ if [ -n "${repo}" ]; then
     cd ${localfolder}
 fi
 
-# Install dependencies using pipenv
+# Install dependencies using pipenv (without shell activation)
 pipenv install
 
-# Add Python development aliases
+# Add Python development aliases to bashrc
 cat << EOF >> ~/.bashrc
-# Python development aliases
-alias python="pipenv run python"
-alias pip="pipenv run pip"
-alias jupyter="pipenv run jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser"
-alias test="pipenv run pytest"
+# Activate virtual environment on login (if terminal is interactive)
+if [[ \$- == *i* ]]; then
+    pipenv shell
+fi
 EOF
-
-# Activate pipenv shell by default
-echo "pipenv shell" >> ~/.bashrc
-
-# Source the updated bashrc to apply changes
-source ~/.bashrc
