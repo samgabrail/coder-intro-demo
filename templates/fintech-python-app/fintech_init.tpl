@@ -32,8 +32,12 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 
 # Clone repository if specified
 if [ -n "${repo}" ]; then
-    echo "Cloning fintech repository..."
-    git clone ${repo} ${localfolder}
+    if [ ! -d "${localfolder}" ]; then
+        echo "Cloning fintech repository..."
+        git clone ${repo} ${localfolder}
+    else
+        echo "Directory ${localfolder} already exists, skipping clone"
+    fi
     cd ${localfolder}
 fi
 
