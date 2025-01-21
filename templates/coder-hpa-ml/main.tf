@@ -170,11 +170,11 @@ resource "kubernetes_persistent_volume_claim" "workspace" {
   }
   wait_until_bound = false
   spec {
-    # storage_class_name = "local-path"
-    access_modes = ["ReadWriteOnce"]
+    storage_class_name = "longhorn"
+    access_modes       = ["ReadWriteMany"]
     resources {
       requests = {
-        storage = "10Gi" // adjust as needed
+        storage = "10Gi"
       }
     }
   }
@@ -316,8 +316,7 @@ resource "kubernetes_deployment" "main" {
           }
           volume_mount {
             mount_path = "/var/lib/docker"
-            name       = "home"
-            sub_path   = "envbox/docker"
+            name       = "docker-storage"
           }
           volume_mount {
             mount_path = "/usr/src"
@@ -353,6 +352,10 @@ resource "kubernetes_deployment" "main" {
             path = "/lib/modules"
             type = ""
           }
+        }
+        volume {
+          name = "docker-storage"
+          empty_dir {}
         }
       }
     }
@@ -401,19 +404,22 @@ resource "kubernetes_horizontal_pod_autoscaler_v2" "workspace" {
 
     behavior {
       scale_up {
-        stabilization_window_seconds = 60
+        select_policy                = "Max"
+        stabilization_window_seconds = 0
         policy {
           type           = "Pods"
-          value          = 1
+          value          = 4
           period_seconds = 60
         }
       }
+
       scale_down {
+        select_policy                = "Min"
         stabilization_window_seconds = 300
         policy {
           type           = "Pods"
           value          = 1
-          period_seconds = 120
+          period_seconds = 60
         }
       }
     }
