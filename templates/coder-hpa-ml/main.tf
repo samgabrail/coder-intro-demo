@@ -215,6 +215,11 @@ resource "kubernetes_deployment" "main" {
       }
 
       spec {
+        security_context {
+          fs_group     = 1000 # coder user's group ID
+          run_as_user  = 1000 # coder user's ID
+          run_as_group = 1000
+        }
 
         container {
           name              = "dev"
@@ -223,7 +228,10 @@ resource "kubernetes_deployment" "main" {
           command           = ["/envbox", "docker"]
 
           security_context {
-            privileged = true
+            privileged                 = true
+            run_as_user                = 1000 # coder user's ID
+            run_as_group               = 1000
+            allow_privilege_escalation = true
           }
 
           resources {
