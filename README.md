@@ -73,6 +73,24 @@ helm upgrade coder coder-v2/coder \
   -f values.yaml
 ```
 
+### 7. Setting up HPA Permissions
+
+If you plan to use HorizontalPodAutoscaler (HPA) resources, you'll need to set up the proper RBAC permissions. Run the following commands:
+
+```bash
+# Create a Role for HPA permissions
+kubectl create role coder-hpa-role \
+  --namespace coder \
+  --verb=get,list,watch,create,update,patch,delete \
+  --resource=horizontalpodautoscalers.autoscaling
+
+# Create a RoleBinding to assign the role to the coder service account
+kubectl create rolebinding coder-hpa-rolebinding \
+  --namespace coder \
+  --role=coder-hpa-role \
+  --serviceaccount=coder:coder
+```
+
 ## Using Minikube in a Workspace
 
 ```bash
