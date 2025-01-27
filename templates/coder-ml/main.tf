@@ -17,7 +17,7 @@ data "coder_parameter" "custom_repo_url" {
   icon         = "https://upload.wikimedia.org/wikipedia/commons/3/3f/Git_icon.svg"
   display_name = "Repository URL"
   description  = "Enter a repository URL."
-  default      = "https://github.com/samgabrail/fintech-python-template.git"
+  default      = "https://github.com/samgabrail/coder-jupyter.git"
   mutable      = true
   order        = 1
 }
@@ -88,6 +88,33 @@ data "coder_parameter" "vscode_theme" {
   }
 }
 
+data "coder_parameter" "cpu" {
+  name         = "cpu"
+  display_name = "CPU Cores"
+  description  = "Number of CPU cores"
+  type         = "number"
+  default      = var.min_cpus
+  mutable      = true
+  validation {
+    min = var.min_cpus
+    max = var.max_cpus
+  }
+  order = 4
+}
+
+data "coder_parameter" "memory" {
+  name         = "memory"
+  display_name = "Memory (GB)"
+  description  = "Memory in GB"
+  type         = "number"
+  default      = var.min_memory
+  mutable      = true
+  validation {
+    min = var.min_memory
+    max = var.max_memory
+  }
+  order = 5
+}
 
 resource "coder_agent" "main" {
   os   = "linux"
@@ -171,7 +198,7 @@ resource "kubernetes_persistent_volume_claim" "workspace" {
   wait_until_bound = false
   spec {
     storage_class_name = "longhorn"
-    access_modes       = ["ReadWriteMany"]
+    access_modes       = ["ReadWriteOnce"]
     resources {
       requests = {
         storage = "10Gi"
@@ -215,29 +242,18 @@ resource "kubernetes_deployment" "main" {
       }
 
       spec {
-        security_context {
-          fs_group     = 1000 # coder user's group ID
-          run_as_user  = 1000 # coder user's ID
-          run_as_group = 1000
-        }
-
         container {
           name              = "dev"
           image             = "ghcr.io/coder/envbox:latest"
           image_pull_policy = "Always"
           command           = ["/envbox", "docker"]
-
           security_context {
-            privileged                 = true
-            run_as_user                = 1000 # coder user's ID
-            run_as_group               = 1000
-            allow_privilege_escalation = true
+            privileged = true
           }
-
           resources {
             requests = {
-              "cpu"    = "${var.min_cpus}"
-              "memory" = "${var.min_memory}G"
+              "cpu"    = "${data.coder_parameter.cpu.value}"
+              "memory" = "${data.coder_parameter.memory.value}G"
             }
             limits = {
               "cpu"    = "${var.max_cpus}"
@@ -324,7 +340,8 @@ resource "kubernetes_deployment" "main" {
           }
           volume_mount {
             mount_path = "/var/lib/docker"
-            name       = "docker-storage"
+            name       = "home"
+            sub_path   = "envbox/docker"
           }
           volume_mount {
             mount_path = "/usr/src"
@@ -335,7 +352,6 @@ resource "kubernetes_deployment" "main" {
             name       = "lib-modules"
           }
         }
-
         volume {
           name = "home"
           persistent_volume_claim {
@@ -361,75 +377,23 @@ resource "kubernetes_deployment" "main" {
             type = ""
           }
         }
-        volume {
-          name = "docker-storage"
-          empty_dir {}
-        }
       }
     }
   }
 }
 
-# Add HPA for dynamic scaling
-resource "kubernetes_horizontal_pod_autoscaler_v2" "workspace" {
-  count = data.coder_workspace.me.start_count
-  metadata {
-    name      = "coder-${lower(data.coder_workspace.me.owner)}-${lower(data.coder_workspace.me.name)}-hpa"
-    namespace = var.namespace
-  }
+resource "coder_app" "jupyter" {
+  agent_id     = coder_agent.main.id
+  slug         = "jupyter"
+  display_name = "Jupyter"
+  url          = "http://localhost:8888/tree"
+  icon         = "/icon/jupyter.svg"
+  subdomain    = false
+  share        = "owner"
 
-  spec {
-    scale_target_ref {
-      api_version = "apps/v1"
-      kind        = "Deployment"
-      name        = kubernetes_deployment.main[0].metadata[0].name
-    }
-
-    min_replicas = 1
-    max_replicas = 3
-
-    metric {
-      type = "Resource"
-      resource {
-        name = "cpu"
-        target {
-          type                = "Utilization"
-          average_utilization = 90
-        }
-      }
-    }
-
-    metric {
-      type = "Resource"
-      resource {
-        name = "memory"
-        target {
-          type                = "Utilization"
-          average_utilization = 90
-        }
-      }
-    }
-
-    behavior {
-      scale_up {
-        select_policy                = "Max"
-        stabilization_window_seconds = 0
-        policy {
-          type           = "Pods"
-          value          = 4
-          period_seconds = 60
-        }
-      }
-
-      scale_down {
-        select_policy                = "Min"
-        stabilization_window_seconds = 300
-        policy {
-          type           = "Pods"
-          value          = 1
-          period_seconds = 60
-        }
-      }
-    }
+  healthcheck {
+    url       = "http://localhost:8888/tree"
+    interval  = 3
+    threshold = 10
   }
 }
