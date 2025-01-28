@@ -386,14 +386,14 @@ resource "coder_app" "jupyter" {
   agent_id     = coder_agent.main.id
   slug         = "jupyter"
   display_name = "Jupyter"
-  url          = "http://localhost:8888/tree"
+  url          = "http://localhost:8888"
   icon         = "/icon/jupyter.svg"
-  subdomain    = false
+  subdomain    = true
   share        = "owner"
 
   healthcheck {
-    url       = "http://localhost:8888/tree"
-    interval  = 3
-    threshold = 10
+    url       = "http://localhost:8888/api/kernels"
+    interval  = 5
+    threshold = 15
   }
 }

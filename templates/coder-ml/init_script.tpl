@@ -67,14 +67,15 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-notebook = "*"
-numpy = "*"
-pandas = "*"
-scikit-learn = "*"
-matplotlib = "*"
-psutil = "*"
-ipykernel = "*"
+notebook = ">=7.0.0"
+numpy = ">=1.24.0"
+pandas = ">=2.0.0"
+scikit-learn = ">=1.0.0"
+matplotlib = ">=3.7.0"
+psutil = ">=5.9.0"
+ipykernel = ">=6.0.0"
 jupyter = "*"
+jupyterlab = "*"
 
 [dev-packages]
 
@@ -83,8 +84,34 @@ python_version = "3.10"
 EOF
 fi
 
-# Install dependencies using pipenv with verbose output
-pipenv install --verbose
+# Install dependencies using pipenv with verbose output and retry on failure
+for i in {1..3}; do
+    if pipenv install --verbose; then
+        break
+    fi
+    echo "Attempt $i failed. Retrying..."
+    sleep 5
+done
+
+# Verify package installation
+echo "Verifying package installations..."
+pipenv run pip list
+pipenv run python -c "
+import sys
+packages = ['numpy', 'pandas', 'sklearn', 'matplotlib', 'psutil']
+missing = []
+for package in packages:
+    try:
+        __import__(package)
+        print(f'{package} successfully imported')
+    except ImportError as e:
+        missing.append(package)
+        print(f'Error importing {package}: {e}')
+if missing:
+    print('Missing packages:', missing)
+    sys.exit(1)
+print('All required packages are installed!')
+"
 
 # Install the kernel specifically for this virtual environment
 pipenv run python -m ipykernel install --user --name=$(pipenv --venv | xargs basename) --display-name="Python ($(pipenv --venv | xargs basename))"
@@ -108,10 +135,14 @@ EOF
 # Create Jupyter config
 mkdir -p ~/.jupyter
 cat << EOF > ~/.jupyter/jupyter_notebook_config.py
-c.NotebookApp.token = ''
-c.NotebookApp.password = ''
-c.NotebookApp.ip = '0.0.0.0'
-c.NotebookApp.allow_root = True
+c.ServerApp.token = ''
+c.ServerApp.password = ''
+c.ServerApp.ip = '0.0.0.0'
+c.ServerApp.allow_root = True
+c.ServerApp.base_url = '/'
+c.ServerApp.allow_origin = '*'
+c.ServerApp.disable_check_xsrf = True
+c.ServerApp.trust_xheaders = True
 EOF
 
 # Add Python development aliases and auto-activation to bashrc
@@ -122,9 +153,21 @@ if [[ \$- == *i* ]]; then
 fi
 
 # Start Jupyter notebook
-pipenv run jupyter notebook --port=8888 --no-browser &
+pipenv run jupyter notebook \
+  --no-browser \
+  --port=8888 \
+  --NotebookApp.allow_origin='*' \
+  --NotebookApp.trust_xheaders=True \
+  --NotebookApp.disable_check_xsrf=True \
+  --NotebookApp.base_url='/' &
 EOF
 
 # Start Jupyter for the current session
-pipenv run jupyter notebook --port=8888 --no-browser >jupyter.log 2>&1 &
+pipenv run jupyter notebook \
+  --no-browser \
+  --port=8888 \
+  --NotebookApp.allow_origin='*' \
+  --NotebookApp.trust_xheaders=True \
+  --NotebookApp.disable_check_xsrf=True \
+  --NotebookApp.base_url='/' >jupyter.log 2>&1 &
 
