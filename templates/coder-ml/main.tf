@@ -132,23 +132,23 @@ resource "coder_agent" "main" {
     GIT_COMMITTER_EMAIL = "${data.coder_workspace.me.owner_email}"
     GITHUB_TOKEN        = data.coder_external_auth.github.access_token
   }
-  metadata {
-    display_name = "CPU Usage"
-    key          = "cpu_usage"
-    script       = "coder stat cpu"
-    interval     = 10
-    timeout      = 1
-    order        = 2
-  }
+  # metadata {
+  #   display_name = "CPU Usage"
+  #   key          = "cpu_usage"
+  #   script       = "coder stat cpu"
+  #   interval     = 10
+  #   timeout      = 1
+  #   order        = 2
+  # }
 
-  metadata {
-    display_name = "RAM Usage"
-    key          = "ram_usage"
-    script       = "coder stat mem"
-    interval     = 10
-    timeout      = 1
-    order        = 1
-  }
+  # metadata {
+  #   display_name = "RAM Usage"
+  #   key          = "ram_usage"
+  #   script       = "coder stat mem"
+  #   interval     = 10
+  #   timeout      = 1
+  #   order        = 1
+  # }
 }
 
 # module "vscode-web" {
@@ -379,21 +379,5 @@ resource "kubernetes_deployment" "main" {
         }
       }
     }
-  }
-}
-
-resource "coder_app" "jupyter" {
-  agent_id     = coder_agent.main.id
-  slug         = "jupyter"
-  display_name = "Jupyter"
-  url          = "http://localhost:8888"
-  icon         = "/icon/jupyter.svg"
-  subdomain    = true
-  share        = "owner"
-
-  healthcheck {
-    url       = "http://localhost:8888/api/kernels"
-    interval  = 5
-    threshold = 15
   }
 }
