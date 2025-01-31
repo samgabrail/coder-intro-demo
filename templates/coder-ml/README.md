@@ -103,7 +103,7 @@ rf_model = RandomForestClassifier(
     min_samples_split=2,
     n_jobs=4,           
     bootstrap=True,
-    max_features='sqrt',  # Changed from 'sqrt' to use all features
+    max_features=None,  # Changed from 'sqrt' to use all features
     verbose=1           
 )
 
