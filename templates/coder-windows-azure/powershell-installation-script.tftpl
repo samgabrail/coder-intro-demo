@@ -1,0 +1,22 @@
+function Set-AdminPassword {
+    param (
+        [string]$adminPassword
+    )
+    # Set admin password
+    Get-LocalUser -Name "${admin_username}" | Set-LocalUser -Password (ConvertTo-SecureString -AsPlainText $adminPassword -Force)
+    # Enable admin user
+    Get-LocalUser -Name "${admin_username}" | Enable-LocalUser
+}
+
+function Configure-RDP {
+    # Enable RDP
+    New-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -PropertyType DWORD -Force
+    # Disable NLA
+    New-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -PropertyType DWORD -Force
+    New-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 1 -PropertyType DWORD -Force
+    # Enable RDP through Windows Firewall
+    Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+}
+
+Set-AdminPassword -adminPassword "${admin_password}"
+Configure-RDP

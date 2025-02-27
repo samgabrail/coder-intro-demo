@@ -1,0 +1,8 @@
+# Copy this file to terraform.tfvars and modify as needed
+# Required values
+hcloud_token = "your_hetzner_cloud_api_token"
+
+# Optional values with defaults shown
+server_name  = "kind-server"
+server_type  = "cx21"      # 2 vCPU, 4 GB RAM
+location     = "nbg1"      # Nuremberg 

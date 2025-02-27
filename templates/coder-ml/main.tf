@@ -47,7 +47,7 @@ data "coder_parameter" "vscode_theme" {
   name         = "vscode_theme"
   display_name = "VSCode Color Theme"
   description  = "Enter the VSCode Color theme you would like to install in your workspace."
-  default      = "Default Dark Modern"
+  default      = "Visual Studio Light"
   icon         = "https://cdn.icon-icons.com/icons2/3053/PNG/512/microsoft_visual_studio_code_alt_macos_bigsur_icon_189955.png"
   mutable      = true
   option {
