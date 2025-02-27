@@ -68,6 +68,7 @@ The server includes:
 - KIND (Kubernetes IN Docker)
 - kubectl
 - Helm
+- Traefik as an ingress controller
 
 ## Setting up Coder
 
@@ -75,12 +76,12 @@ Once the server is created:
 
 1. SSH into the server:
    ```
-   ssh ubuntu@<server-ip>
+   ssh root@<server-ip>
    ```
 
 2. Run the installation script to create a KIND cluster and install Coder:
    ```
-   ./install-coder.sh
+   /root/install-coder.sh
    ```
 
 3. Access Coder:
@@ -90,12 +91,35 @@ Once the server is created:
 
 The installation includes:
 - A single-node KIND cluster with port forwarding (80/443)
+- Traefik as an ingress controller with dashboard
 - PostgreSQL database installed via Helm
 - Coder installed via Helm
 
+## Configuring DNS for Ingress
+
+For proper ingress functionality with domain names, you need to configure your DNS provider (such as CloudFlare) to point to your Hetzner Cloud server's IP address:
+
+1. Get your server's public IP address from the Terraform output or Hetzner Cloud console.
+
+2. Log in to your CloudFlare account.
+
+3. Add/update DNS records for your domains:
+   - Create an A record pointing to your server's IP address
+   - For example: `coder.yourdomain.com` → `<server-ip>`
+   - For Traefik dashboard: `traefik.yourdomain.com` → `<server-ip>`
+
+4. Configure your Coder Helm values to use these domain names in your ingress configuration.
+
+5. If using CloudFlare, consider:
+   - Setting the proxy status to "DNS only" initially for troubleshooting
+   - Using "Proxied" status once everything is working for added security and CDN benefits
+   - Configuring SSL/TLS settings appropriately (Full or Full (strict) recommended)
+
+This DNS configuration is essential for your ingress controller to properly route traffic based on hostnames.
+
 ## Custom Configuration
 
-The Coder configuration files are located in the `/home/ubuntu/k8s-config` directory:
+The Coder configuration files are located in the `/root/k8s-config` directory:
 - `values.yaml`: Main Coder configuration
 - `secrets.yaml`: Secret configuration for Coder
 - `values-postgres.yaml`: PostgreSQL configuration

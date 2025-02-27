@@ -42,7 +42,18 @@ resource "hcloud_server" "kind_server" {
   ssh_keys    = [hcloud_ssh_key.generated_key.id, data.hcloud_ssh_key.existing_key.id]
 
   # Use the external user-data script with a wrapper for SSH key setup
-  user_data = file("${path.module}/user-data.sh")
+  user_data = <<-EOF
+#!/bin/bash
+
+# Add the generated SSH key to root's authorized_keys
+mkdir -p /root/.ssh
+echo "${tls_private_key.ssh_key.public_key_openssh}" >> /root/.ssh/authorized_keys
+chmod 700 /root/.ssh
+chmod 600 /root/.ssh/authorized_keys
+
+# Run the main installation script
+${file("${path.module}/user-data.sh")}
+EOF
 
   # Use root user for SSH connection
   connection {

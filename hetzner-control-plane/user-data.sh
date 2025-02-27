@@ -56,8 +56,50 @@ kind create cluster --config kind-config.yaml
 # Wait for the cluster to be ready
 kubectl wait --for=condition=Ready nodes --all --timeout=300s
 
-# Create a namespace for Coder
+# Create namespaces
 kubectl create namespace coder
+kubectl create namespace traefik
+
+# Install Traefik using Helm
+echo "Installing Traefik..."
+helm repo add traefik https://traefik.github.io/charts
+helm repo update
+
+# Install Traefik with custom values for KIND
+helm upgrade --install traefik traefik/traefik \
+    --namespace traefik \
+    --set ingressClass.enabled=true \
+    --set ingressClass.isDefaultClass=true \
+    --set ports.web.nodePort=30080 \
+    --set ports.websecure.nodePort=30443 \
+    --set service.type=NodePort \
+    --set persistence.enabled=false \
+    --set dashboard.enabled=true \
+    --set dashboard.ingressRoute=true
+
+# Wait for Traefik to be ready
+echo "Waiting for Traefik to be ready..."
+kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=traefik --namespace traefik --timeout=300s
+
+# Create an ingress route for Traefik dashboard
+cat <<EOF | kubectl apply -f -
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: traefik-dashboard
+  namespace: traefik
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(\`traefik.localhost\`)
+      kind: Rule
+      services:
+        - name: api@internal
+          kind: TraefikService
+EOF
+
+echo "Traefik installed and configured"
 
 # Install PostgreSQL using Helm
 helm repo add bitnami https://charts.bitnami.com/bitnami
@@ -83,14 +125,17 @@ helm upgrade --install coder coder-v2/coder \\
 echo "Waiting for Coder to be ready..."
 kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=coder --namespace coder --timeout=300s
 
-# Create an admin user
-kubectl exec -it deployment/coder -n coder -- coder users create --username admin --email admin@example.com --password admin123 --auth password
+# Create an admin user (if Coder is properly configured)
+kubectl exec -it deployment/coder -n coder -- coder users create --username admin --email admin@example.com --password admin123 --auth password || echo "Note: Admin user creation failed. You may need to create one manually."
 
 echo ""
 echo "================================================================"
 echo "Coder has been installed!"
 echo ""
-echo "To access Coder, visit: http://localhost"
+echo "Access your applications at:"
+echo "- Coder: Access through the ingress configured in your Helm values"  
+echo "- Traefik Dashboard: http://traefik.localhost"
+echo ""
 echo "Username: admin"
 echo "Password: admin123"
 echo "================================================================"
