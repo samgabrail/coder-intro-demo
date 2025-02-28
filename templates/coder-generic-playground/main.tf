@@ -35,10 +35,10 @@ data "coder_parameter" "vscode_extensions" {
   name         = "vscode_extensions"
   icon         = "https://raw.githubusercontent.com/dhanishgajjar/vscode-icons/master/png/default.png"
   display_name = "VS Code Extensions"
-  default      = jsonencode(["sourcegraph.cody-ai", "ms-python.python", "hashicorp.terraform", "ms-kubernetes-tools.vscode-kubernetes-tools"])
-  description  = "Enter the VSCode extensions you would like to install in your workspace."
+  default      = "sourcegraph.cody-ai,ms-python.python,hashicorp.terraform,ms-kubernetes-tools.vscode-kubernetes-tools"
+  description  = "Enter the VSCode extensions you would like to install in your workspace (comma-separated)."
   mutable      = true
-  type         = "list(string)"
+  type         = "string"
   order        = 3
 }
 
@@ -150,7 +150,7 @@ module "code-server" {
   agent_id       = coder_agent.main.id
   install_prefix = "/home/coder/.vscode-web"
   folder         = "/home/coder/${local.folder_name}"
-  extensions     = jsondecode(data.coder_parameter.vscode_extensions.value)
+  extensions     = split(",", data.coder_parameter.vscode_extensions.value)
   settings = {
     "workbench.colorTheme" = data.coder_parameter.vscode_theme.value
   }
