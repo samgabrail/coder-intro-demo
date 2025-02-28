@@ -9,7 +9,7 @@ apt-get upgrade -y
 # Install dependencies
 apt-get install -y apt-transport-https ca-certificates curl software-properties-common gnupg
 
-# Install Docker
+# Install Docker (still useful for container management)
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 chmod a+r /etc/apt/keyrings/docker.gpg
@@ -17,15 +17,15 @@ echo "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docke
 apt-get update
 apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-# Install KIND
-curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
-chmod +x ./kind
-mv ./kind /usr/local/bin/
+# Install K3s with default Traefik
+curl -sfL https://get.k3s.io | sh -
 
-# Install kubectl
-curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-chmod +x kubectl
-mv ./kubectl /usr/local/bin/
+# Configure kubectl to use k3s
+mkdir -p /root/.kube
+ln -sf /etc/rancher/k3s/k3s.yaml /root/.kube/config
+chmod 600 /root/.kube/config
+export KUBECONFIG=/root/.kube/config
+echo "export KUBECONFIG=/root/.kube/config" >> /root/.bashrc
 
 # Install Helm
 curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
@@ -34,8 +34,13 @@ curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 echo "Installing additional Kubernetes utilities..."
 apt-get update -y
 
-# Install git for kubectx
+# Install git for kubectx and yq for YAML processing
 apt-get install -y git fzf jq tmux unzip net-tools
+
+# Install yq (YAML processor)
+echo "Installing yq..."
+wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+chmod +x /usr/local/bin/yq
 
 # Install kubectx and kubens
 git clone https://github.com/ahmetb/kubectx /opt/kubectx
@@ -67,33 +72,37 @@ EOA
 
 echo "✅ kubectx, kubens, fzf, homebrew, k9s, and kubectl aliases installed successfully"
 
-# Create a basic KIND cluster config file for a single node with proper port mappings
-cat > /root/kind-config.yaml <<EOT
-kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-nodes:
-- role: control-plane
-  extraPortMappings:
-  - containerPort: 30080
-    hostPort: 80
-    protocol: TCP
-  - containerPort: 30443
-    hostPort: 443
-    protocol: TCP
-EOT
-
-# Create a script to start the KIND cluster and install Coder
+# Create a script to install Coder on K3s
 cat > /root/install-coder.sh <<EOT
 #!/bin/bash
 # Exit when any command fails
 set -e
 
 # Get the server's public IP address for reference
-SERVER_IP=$(curl -s ifconfig.me)
+SERVER_IP=$(curl -s -4 ifconfig.me)
+SERVER_IP6=$(curl -s -6 ifconfig.me || echo "")
 
-# Extract domains from existing values.yaml
-CODER_DOMAIN=$(grep -A 3 'ingress:' k8s-config/values.yaml | grep 'host:' | head -1 | awk '{print $2}' | tr -d '"')
+# Extract domains from existing values.yaml using yq (proper YAML parser)
+# Check if values.yaml exists
+if [ ! -f k8s-config/values.yaml ]; then
+  echo "⚠️ k8s-config/values.yaml not found! Please check the file exists."
+  exit 1
+fi
+
+# Use yq to extract values
+CODER_DOMAIN=$(yq '.coder.ingress.host' k8s-config/values.yaml)
+WILDCARD_DOMAIN=$(yq '.coder.ingress.wildcardHost' k8s-config/values.yaml)
 TRAEFIK_DOMAIN="traefik.${CODER_DOMAIN#*.}"
+
+# Check if the domains were extracted correctly
+if [ "$CODER_DOMAIN" == "null" ] || [ -z "$CODER_DOMAIN" ]; then
+  echo "⚠️ Failed to extract Coder domain from values.yaml"
+  echo "⚠️ Please check that 'coder.ingress.host' is properly defined in the file"
+  exit 1
+fi
+
+echo "✨ Using domain: $CODER_DOMAIN ✨"
+echo "✨ Using wildcard domain: $WILDCARD_DOMAIN ✨"
 
 # Create a diagnostic script to check network connectivity
 cat > /root/check-network.sh <<EOF
@@ -101,13 +110,13 @@ cat > /root/check-network.sh <<EOF
 echo "=== Network Diagnostics Tool ==="
 echo ""
 echo "Testing local ports..."
-netstat -tulpn | grep -E ':(80|443|30080|30443)'
-echo ""
-echo "Testing docker networking..."
-docker ps
+netstat -tulpn | grep -E ':(80|443)'
 echo ""
 echo "Testing firewall status..."
 iptables -L -n
+echo ""
+echo "Testing K3s traefik setup..."
+kubectl get svc -n kube-system traefik -o yaml
 echo ""
 echo "Testing services in cluster..."
 kubectl get svc -A
@@ -119,25 +128,19 @@ echo "Testing TLS certificates..."
 kubectl get certificates,certificaterequests -A
 echo ""
 echo "Testing endpoint connectivity..."
-curl -v localhost:30080 -o /dev/null
+curl -v -4 localhost:80 -o /dev/null
 echo ""
-echo "Server IP Address: $SERVER_IP"
+echo "Server IPv4 Address: $SERVER_IP"
+if [ ! -z "$SERVER_IP6" ]; then
+  echo "Server IPv6 Address: $SERVER_IP6"
+fi
 echo "Coder Domain: $CODER_DOMAIN"
 echo ""
 EOF
 chmod +x /root/check-network.sh
 
-# Check if KIND cluster already exists
-if kind get clusters | grep -q "^kind$"; then
-  echo "✅ KIND cluster 'kind' already exists, using existing cluster"
-else
-  echo "🔄 Creating new KIND cluster 'kind'..."
-  kind create cluster --config kind-config.yaml
-  echo "✅ KIND cluster created successfully"
-fi
-
-# Wait for the cluster to be ready
-echo "🔄 Ensuring cluster is ready..."
+# Wait for K3s to be ready
+echo "🔄 Ensuring K3s cluster is ready..."
 kubectl wait --for=condition=Ready nodes --all --timeout=300s || true
 
 # Create namespaces (apply is idempotent)
@@ -153,99 +156,17 @@ kubectl apply -f - <<EOF
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: traefik
-EOF
-
-kubectl apply -f - <<EOF
-apiVersion: v1
-kind: Namespace
-metadata:
   name: cert-manager
 EOF
 
-# Install Traefik using Helm
-echo "🔄 Installing Traefik..."
-helm repo add traefik https://traefik.github.io/charts
-helm repo update
-
-# Check if Traefik CRDs exist and install if needed
-if ! kubectl get crd ingressroutes.traefik.io > /dev/null 2>&1; then
-  echo "🔄 Installing Traefik CRDs..."
-  kubectl apply -f https://raw.githubusercontent.com/traefik/traefik/v2.10/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
-fi
-
-# Create custom values for Traefik to match our KIND port mappings
-cat > /root/traefik-values.yaml <<EOF
-ingressClass:
-  enabled: true
-  isDefaultClass: true
-ports:
-  web:
-    port: 8000
-    exposedPort: 30080
-    protocol: TCP
-  websecure:
-    port: 8443
-    exposedPort: 30443
-    protocol: TCP
-nodePort:
-  web: 30080
-  websecure: 30443
-service:
-  enabled: true
-  type: NodePort
-persistence:
-  enabled: false
-dashboard:
-  enabled: true
-  ingressRoute: true
-  middlewares: []
-deployment:
-  replicas: 1
-logs:
-  general:
-    level: INFO
-  access:
-    enabled: true
-EOF
-
-# Install Traefik with custom values for KIND
-echo "🔄 Installing Traefik with NodePort configuration..."
-helm upgrade --install traefik traefik/traefik \
-    --namespace traefik \
-    -f /root/traefik-values.yaml \
-    --set installCRDs=true
-
-# Wait for Traefik to be ready
-echo "🔄 Waiting for Traefik to be ready..."
-kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=traefik --namespace traefik --timeout=300s || true
-
-# Verify Traefik CRDs are established before proceeding
-echo "🔄 Verifying Traefik CRDs..."
-MAX_RETRIES=10
-COUNT=0
-while ! kubectl get crd ingressroutes.traefik.containo.us > /dev/null 2>&1 && [ $COUNT -lt $MAX_RETRIES ]; do
-  echo "Waiting for Traefik CRDs to be established ($COUNT/$MAX_RETRIES)..."
-  sleep 5
-  COUNT=$((COUNT+1))
-done
-
-if [ $COUNT -eq $MAX_RETRIES ]; then
-  echo "⚠️ Traefik CRDs not detected after maximum retries. Will attempt to install them manually."
-  kubectl apply -f https://raw.githubusercontent.com/traefik/traefik/v2.10/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
-  sleep 5
-else
-  echo "✅ Traefik CRDs detected successfully"
-fi
-
-# Create an ingress route for Traefik dashboard using TLS
-echo "🔄 Creating Traefik dashboard IngressRoute with TLS..."
+# Create traefik dashboard IngressRoute with default K3s traefik
+echo "🔄 Creating Traefik dashboard IngressRoute..."
 kubectl apply -f - <<EOF
-apiVersion: traefik.containo.us/v1alpha1
+apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: traefik-dashboard
-  namespace: traefik
+  namespace: kube-system
 spec:
   entryPoints:
     - websecure
@@ -256,11 +177,11 @@ spec:
         - name: api@internal
           kind: TraefikService
   tls:
-    certResolver: letsencrypt
+    certResolver: le
 EOF
 
-echo "✅ Traefik installed and configured"
-echo "  → Configure Traefik dashboard at: https://$TRAEFIK_DOMAIN (after DNS setup)"
+echo "✅ Traefik dashboard configured"
+echo "  → Access Traefik dashboard at: https://$TRAEFIK_DOMAIN (after DNS setup)"
 
 # Install cert-manager
 echo "🔄 Installing cert-manager..."
@@ -328,50 +249,14 @@ echo "🔄 Installing Coder..."
 helm repo add coder-v2 https://helm.coder.com/v2
 helm repo update
 
-# Install Coder with existing values files only
+# Make sure your values.yaml has proper ingress annotations compatible with K3s Traefik
+# Install Coder with existing values files
 helm upgrade --install coder coder-v2/coder \
   --namespace coder \
   -f k8s-config/secrets.yaml \
   -f k8s-config/values.yaml
 
-# Wait for Coder pod to be ready
-echo "🔄 Waiting for Coder to be ready..."
-kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=coder --namespace coder --timeout=300s || true
 
-# Install the Coder CLI locally for management
-echo "🔄 Installing Coder CLI locally..."
-kubectl -n coder get secret coder-coder -o jsonpath="{.data.provisionerDaemonKey}" | base64 -d > /root/coder-provisioner-key
-cat > /etc/profile.d/coder-cli.sh <<'EOF'
-export CODER_URL="http://localhost:8000"
-export CODER_SESSION_TOKEN="$(cat /root/coder-provisioner-key 2>/dev/null || echo '')"
-EOF
-source /etc/profile.d/coder-cli.sh
-
-# Start port forwarding to the Coder instance in the background
-kubectl port-forward -n coder svc/coder 8000:80 --address 0.0.0.0 &> /dev/null &
-echo $! > /tmp/coder-port-forward.pid
-
-# Wait a bit for the port forwarding to establish
-sleep 5
-
-# Check if admin user exists, create if not
-echo "🔄 Checking for admin user..."
-if ! kubectl -n coder exec -i deployment/coder -- coder users list | grep -q admin; then
-  echo "🔄 Creating admin user..."
-  # Try with older syntax first
-  kubectl -n coder exec -i deployment/coder -- coder users create --username admin --email admin@example.com --password admin123 || \
-  # If that fails, try newer syntax without --auth flag
-  kubectl -n coder exec -i deployment/coder -- coder users create username=admin email=admin@example.com password=admin123 || \
-  echo "⚠️ Admin user creation failed. Please create one manually with: kubectl -n coder exec -i deployment/coder -- coder users create"
-else
-  echo "✅ Admin user already exists"
-fi
-
-# Stop the port forwarding
-if [ -f /tmp/coder-port-forward.pid ]; then
-  kill $(cat /tmp/coder-port-forward.pid) &> /dev/null || true
-  rm /tmp/coder-port-forward.pid
-fi
 
 # Check network connectivity to verify everything is working
 echo "🔄 Running network diagnostics..."
@@ -395,6 +280,9 @@ echo "  → Password: admin123"
 echo ""
 echo "💡 Cloudflare DNS Configuration Recommendations:"
 echo "  1. Create A records pointing to $SERVER_IP"
+if [ ! -z "$SERVER_IP6" ]; then
+  echo "  1a. Optionally create AAAA records pointing to $SERVER_IP6"
+fi
 echo "  2. Initially set Proxy Status to DNS Only (gray cloud) for troubleshooting"
 echo "  3. Once working, you can enable 'Proxied' (orange cloud) for added security"
 echo "  4. Configure SSL/TLS mode to 'Full' or 'Full (strict)'"
@@ -413,7 +301,7 @@ echo ""
 echo "🔧 If you're still unable to access Coder after DNS setup:"
 echo "  1. Run '/root/check-network.sh' to verify network configuration"
 echo "  2. Make sure your firewall rules allow traffic on ports 80 and 443"
-echo "  3. Check logs with: kubectl logs -n traefik deployment/traefik"
+echo "  3. Check logs with: kubectl logs -n kube-system -l app.kubernetes.io/name=traefik"
 echo "  4. Check certificate status: kubectl get certificates -n coder"
 echo ""
 echo "🔍 To check cluster status: k9s or kubectl get pods -A"
