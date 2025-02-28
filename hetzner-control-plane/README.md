@@ -69,6 +69,17 @@ The server includes:
 - kubectl
 - Helm
 - Traefik as an ingress controller
+- cert-manager with Let's Encrypt integration
+- Kubernetes utilities:
+  - kubectx & kubens (for easy context and namespace switching)
+  - k9s (terminal UI for Kubernetes)
+  - fzf (fuzzy finder)
+  - Useful kubectl aliases (`k`, `kga`, `kgn`, etc.)
+
+The KIND cluster is configured with:
+- A single-node setup with port forwarding (80/443)
+- Traefik as the default ingress controller
+- cert-manager configured with a ClusterIssuer for Let's Encrypt
 
 ## Setting up Coder
 
@@ -92,6 +103,7 @@ Once the server is created:
 The installation includes:
 - A single-node KIND cluster with port forwarding (80/443)
 - Traefik as an ingress controller with dashboard
+- cert-manager for automatic TLS certificate provisioning
 - PostgreSQL database installed via Helm
 - Coder installed via Helm
 
@@ -115,7 +127,23 @@ For proper ingress functionality with domain names, you need to configure your D
    - Using "Proxied" status once everything is working for added security and CDN benefits
    - Configuring SSL/TLS settings appropriately (Full or Full (strict) recommended)
 
-This DNS configuration is essential for your ingress controller to properly route traffic based on hostnames.
+## TLS Certificates with Let's Encrypt
+
+The cluster includes cert-manager configured to automatically provision TLS certificates from Let's Encrypt when you create Ingress resources with the appropriate annotations:
+
+1. The `cert-manager.io/cluster-issuer: letsencrypt-prod` annotation is already included in the Coder values.yaml
+
+2. cert-manager will automatically:
+   - Request certificates from Let's Encrypt for your domain
+   - Validate ownership using HTTP-01 challenges
+   - Store the certificates as Kubernetes secrets
+   - Renew certificates before they expire
+
+3. Your domain must be publicly accessible for Let's Encrypt validation to work
+
+4. For wildcard certificates, you'll need to use DNS-01 challenges, which require additional configuration specific to your DNS provider
+
+This DNS configuration and certificate setup is essential for your ingress controller to properly route traffic based on hostnames and provide secure HTTPS connections.
 
 ## Custom Configuration
 

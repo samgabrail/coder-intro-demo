@@ -291,7 +291,7 @@ coder:
     className: "traefik"
     # coder.ingress.host -- The hostname to match on.
     # Be sure to also set CODER_ACCESS_URL within coder.env[]
-    host: "coder.tekanaid.com"
+    host: "coderdemo.tekanaid.com"
     # coder.ingress.wildcardHost -- The wildcard hostname to match on. Should be
     # in the form "*.example.com" or "*-suffix.example.com". If you are using a
     # suffix after the wildcard, the suffix will be stripped from the created

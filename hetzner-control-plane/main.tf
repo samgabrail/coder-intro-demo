@@ -33,6 +33,10 @@ data "hcloud_ssh_key" "existing_key" {
   name = var.ssh_key_name
 }
 
+data "hcloud_firewall" "kind_firewall" {
+  name = "SSH, HTTP, HTTPS"
+}
+
 # Create Hetzner Cloud server
 resource "hcloud_server" "kind_server" {
   name        = var.server_name
@@ -40,6 +44,7 @@ resource "hcloud_server" "kind_server" {
   server_type = var.server_type
   location    = var.location
   ssh_keys    = [hcloud_ssh_key.generated_key.id, data.hcloud_ssh_key.existing_key.id]
+  firewall_ids = [data.hcloud_firewall.kind_firewall.id]
 
   # Use the external user-data script with a wrapper for SSH key setup
   user_data = <<-EOF
